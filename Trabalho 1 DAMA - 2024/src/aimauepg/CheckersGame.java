@@ -14,8 +14,15 @@ public class CheckersGame implements Game<char[][], String, Character> {
     private static final int SIZE = 8;
     private char[][] board;
     private char currentPlayer;
-    private IterativeDeepeningAlphaBetaSearch<char[][], String, Character> iterativeDeepeningAlphaBetaSearch;
+    IterativeDeepeningAlphaBetaSearch<char[][], String, Character> iterativeDeepeningAlphaBetaSearch;
     private Scanner scanner;
+    private int movesWithoutCapture;
+
+    private static final int MAX_MOVES_WITHOUT_CAPTURE = 5; // Número máximo de jogadas sem eliminação antes do empate
+
+    private boolean isKing(char piece) {
+        return piece == 'K' || piece == 'Q';
+    }
 
     public CheckersGame() {
         board = new char[SIZE][SIZE];
@@ -25,6 +32,8 @@ public class CheckersGame implements Game<char[][], String, Character> {
         this.iterativeDeepeningAlphaBetaSearch = IterativeDeepeningAlphaBetaSearch.createFor(this,
                 Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 5); // Specify the time limit (in seconds) for the
                                                                         // search
+        this.movesWithoutCapture = 0; // Inicializa o contador de jogadas sem eliminação
+
     }
 
     private void initializeBoard() {
@@ -61,9 +70,13 @@ public class CheckersGame implements Game<char[][], String, Character> {
     }
 
     private boolean isValidMove(int startRow, int startCol, int endRow, int endCol, char[][] state) {
+        char piece = state[startRow][startCol];
+        boolean isKing = isKing(piece);
+        int dir = (piece == 'X' || piece == 'K') ? -1 : 1; // Direction of movement (forward/backward)
+
         return endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE &&
                 state[endRow][endCol] == ' ' && Math.abs(endRow - startRow) == 1 &&
-                Math.abs(endCol - startCol) == 1;
+                Math.abs(endCol - startCol) == 1 && (isKing || dir == 1);
     }
 
     private boolean isValidJump(int startRow, int startCol, int endRow, int endCol, char[][] state, boolean isKing) {
@@ -85,20 +98,33 @@ public class CheckersGame implements Game<char[][], String, Character> {
 
     public void makeMove(int startRow, int startCol, int endRow, int endCol) {
         char piece = board[startRow][startCol];
-        board[startRow][startCol] = ' '; // Remove the piece from the start position
-        board[endRow][endCol] = piece; // Place the piece at the end position
+        board[startRow][startCol] = ' '; // Remove a peça da posição inicial
+        board[endRow][endCol] = piece; // Coloque a peça na posição final
 
-        // If the piece is a king and reaches the opponent's last row, crown the piece
+        // Se a peça for uma dama e chegar à última linha do oponente, coroe a peça
         if ((piece == 'O' && endRow == SIZE - 1) || (piece == 'X' && endRow == 0)) {
             board[endRow][endCol] = Character.toUpperCase(piece);
+            System.out.println("Player " + currentPlayer + " made a king!");
+            // Você pode adicionar um método para verificar se um jogador ganhou após coroar
+            // uma peça
+            if (hasPlayerWon(currentPlayer)) {
+                System.out.println("Player " + currentPlayer + " wins!");
+                return;
+            }
         }
 
-        // If the move is a jump, remove the captured piece
+        // Se o movimento for um salto, remova a peça capturada
         if (Math.abs(startRow - endRow) == 2) {
             int jumpRow = (startRow + endRow) / 2;
             int jumpCol = (startCol + endCol) / 2;
             board[jumpRow][jumpCol] = ' ';
+            movesWithoutCapture = 0;
+        } else {
+            movesWithoutCapture++;
         }
+
+        // Troque para o próximo jogador
+        switchToNextPlayer();
     }
 
     public boolean isGameOver() {
@@ -223,7 +249,7 @@ public class CheckersGame implements Game<char[][], String, Character> {
         // Check if the game is in a terminal state (e.g., one player wins or no more
         // moves)
         // You'll need to implement this method based on your game rules
-        return isGameOver();
+        return isGameOver() || movesWithoutCapture >= MAX_MOVES_WITHOUT_CAPTURE;
     }
 
     @Override
@@ -328,6 +354,19 @@ public class CheckersGame implements Game<char[][], String, Character> {
         }
         printBoard();
         System.out.println("Game over!");
+    }
+
+    private boolean hasPlayerWon(char player) {
+        for (int row = 0; row < SIZE; row++) {
+            for (int col = 0; col < SIZE; col++) {
+                char piece = board[row][col];
+                if ((player == 'X' && (piece == 'O' || piece == 'Q')) ||
+                        (player == 'O' && (piece == 'X' || piece == 'K'))) {
+                    return false; // Ainda há peças do oponente no tabuleiro
+                }
+            }
+        }
+        return true; // O jogador não tem mais peças do oponente no tabuleiro, então ele ganhou
     }
 
     private char[][] getCopyOfBoard() {
