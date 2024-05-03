@@ -1,16 +1,13 @@
-
 package aimauepg;
 
 import javax.swing.*;
 import java.awt.*;
-
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 public class CheckersGameGUI extends JFrame {
     private static final int SIZE = 8;
     private char[][] board;
-    private char currentPlayer;
     private JPanel boardPanel;
     private JLabel[][] labels;
     private int selectedRow = -1;
@@ -24,34 +21,13 @@ public class CheckersGameGUI extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        board = new char[SIZE][SIZE];
-        currentPlayer = 'O';
-
-        initializeBoard();
+        board = checkersGame.getInitialState();
         createBoardPanel();
 
         add(boardPanel, BorderLayout.CENTER);
         pack();
         setVisible(true);
         updateBoard();
-    }
-
-    private void initializeBoard() {
-        for (int row = 0; row < SIZE; row++) {
-            for (int col = 0; col < SIZE; col++) {
-                if ((row + col) % 2 == 0) {
-                    board[row][col] = ' ';
-                } else {
-                    if (row < 3) {
-                        board[row][col] = 'O'; // Black piece
-                    } else if (row > 4) {
-                        board[row][col] = 'X'; // White piece
-                    } else {
-                        board[row][col] = ' '; // Empty space in the middle of the board
-                    }
-                }
-            }
-        }
     }
 
     private void createBoardPanel() {
@@ -71,87 +47,101 @@ public class CheckersGameGUI extends JFrame {
     }
 
     private void movePiece(int endRow, int endCol) {
-        if (selectedRow != -1 && selectedCol != -1) {
-            // Move a peça no tabuleiro do jogo
+        if (selectedRow != -1 && selectedCol != -1 && checkersGame.isValidMove(selectedRow, selectedCol, endRow, endCol, board)) {
             checkersGame.makeMove(selectedRow, selectedCol, endRow, endCol);
-            // Atualiza o tabuleiro da interface gráfica com o novo estado do tabuleiro do
-            // jogo
             updateBoard();
-            selectedRow = -1;
-            selectedCol = -1;
+            clearHighlights();
+            switchToNextPlayer();
+        }
+    }
 
-            // A vez é do próximo jogador (IA ou humano)
-            if (!checkersGame.isGameOver() && checkersGame.getPlayer(checkersGame.getInitialState()) == 'X') {
-                // É a vez da IA
-                makeAIMove();
+    private void updateBoard() {
+        char[][] currentBoard = checkersGame.getInitialState();
+        for (int row = 0; row < SIZE; row++) {
+            for (int col = 0; col < SIZE; col++) {
+                labels[row][col].setText(Character.toString(currentBoard[row][col]));
+                labels[row][col].setBackground((row + col) % 2 == 0 ? Color.GRAY : Color.WHITE);
             }
+        }
+    }
+
+    private void clearHighlights() {
+        for (int row = 0; row < SIZE; row++) {
+            for (int col = 0; col < SIZE; col++) {
+                labels[row][col].setBackground((row + col) % 2 == 0 ? Color.GRAY : Color.WHITE);
+            }
+        }
+    }
+
+    private void switchToNextPlayer() {
+        checkersGame.switchToNextPlayer();
+        if (checkersGame.getCurrentPlayer() == 'X') { // Assuming 'X' is the AI
+            SwingUtilities.invokeLater(this::makeAIMove);
         }
     }
 
     private void makeAIMove() {
-        char[][] currentState = checkersGame.getInitialState();
-        String aiAction = checkersGame.iterativeDeepeningAlphaBetaSearch.makeDecision(currentState);
-        String[] parts = aiAction.split(":");
-        String[] start = parts[0].split(",");
-        String[] end = parts[1].split(",");
-        int startRow = Integer.parseInt(start[0]);
-        int startCol = Integer.parseInt(start[1]);
-        int endRow = Integer.parseInt(end[0]);
-        int endCol = Integer.parseInt(end[1]);
-
-        checkersGame.makeMove(startRow, startCol, endRow, endCol);
-        updateBoard();
+        try {
+            JOptionPane.showMessageDialog(this, "AI is thinking...", "AI Move", JOptionPane.INFORMATION_MESSAGE);
+            String aiAction = checkersGame.iterativeDeepeningAlphaBetaSearch.makeDecision(board);
+            if (aiAction != null && !aiAction.isEmpty()) {
+                applyMove(aiAction);
+            } else {
+                JOptionPane.showMessageDialog(this, "AI did not find a valid move.", "No Move", JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "An error occurred during AI processing: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
-    /**
-     * @param state
-     * @return
-     */
-
-    private void updateBoard() {
-        char[][] board = checkersGame.getInitialState(); // Obtém o estado atual do tabuleiro do jogo
-
-        for (int row = 0; row < SIZE; row++) {
-            for (int col = 0; col < SIZE; col++) {
-                labels[row][col].setText(Character.toString(board[row][col]));
-            }
-        }
+    private void applyMove(String move) {
+        String[] parts = move.split(":");
+        int startRow = Integer.parseInt(parts[0].split(",")[0]);
+        int startCol = Integer.parseInt(parts[0].split(",")[1]);
+        int endRow = Integer.parseInt(parts[1].split(",")[0]);
+        int endCol = Integer.parseInt(parts[1].split(",")[1]);
+        checkersGame.makeMove(startRow, startCol, endRow, endCol);
+        updateBoard();
+        switchToNextPlayer();
     }
 
     private class PieceClickListener extends MouseAdapter {
         private int row;
         private int col;
-        private boolean isSelected;
 
         public PieceClickListener(int row, int col) {
             this.row = row;
             this.col = col;
-            this.isSelected = false;
         }
 
         @Override
         public void mouseClicked(MouseEvent e) {
-            if (!isSelected && board[row][col] == currentPlayer) {
-                isSelected = true;
-                selectedRow = row;
-                selectedCol = col;
-                if (selectedLabel != null) {
-                    selectedLabel.setBackground((row + col) % 2 == 0 ? Color.GRAY : Color.WHITE);
-                }
-                selectedLabel = labels[row][col];
-                selectedLabel.setBackground(Color.YELLOW); // Change the color to indicate selection
-            } else if (isSelected) {
+            if (selectedRow == -1 && board[row][col] == checkersGame.getCurrentPlayer()) {
+                selectPiece(row, col);
+            } else if (selectedRow != -1) {
                 movePiece(row, col);
-                isSelected = false;
-                selectedLabel.setBackground((row + col) % 2 == 0 ? Color.GRAY : Color.WHITE);
-                selectedLabel = null;
+                deselectPiece();
             }
-            updateBoard();
         }
+    }
+
+    private void selectPiece(int row, int col) {
+        selectedRow = row;
+        selectedCol = col;
+        selectedLabel = labels[row][col];
+        selectedLabel.setBackground(Color.YELLOW);
+    }
+
+    private void deselectPiece() {
+        if (selectedLabel != null) {
+            selectedLabel.setBackground((selectedRow + selectedCol) % 2 == 0 ? Color.GRAY : Color.WHITE);
+        }
+        selectedRow = -1;
+        selectedCol = -1;
+        selectedLabel = null;
     }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(CheckersGameGUI::new);
-
     }
 }

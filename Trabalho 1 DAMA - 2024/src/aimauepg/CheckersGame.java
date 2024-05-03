@@ -16,6 +16,7 @@ public class CheckersGame implements Game<char[][], String, Character> {
     private char currentPlayer;
     IterativeDeepeningAlphaBetaSearch<char[][], String, Character> iterativeDeepeningAlphaBetaSearch;
     private Scanner scanner;
+    private char aiPlaysAs; // 'X' or 'O', set this when initializing the game
     private int movesWithoutCapture;
 
     private static final int MAX_MOVES_WITHOUT_CAPTURE = 5; // Número máximo de jogadas sem eliminação antes do empate
@@ -69,23 +70,36 @@ public class CheckersGame implements Game<char[][], String, Character> {
         }
     }
 
-    private boolean isValidMove(int startRow, int startCol, int endRow, int endCol, char[][] state) {
+    boolean isValidMove(int startRow, int startCol, int endRow, int endCol, char[][] state) {
         char piece = state[startRow][startCol];
         boolean isKing = isKing(piece);
-        int dir = (piece == 'X' || piece == 'K') ? -1 : 1; // Direction of movement (forward/backward)
-
-        return endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE &&
-                state[endRow][endCol] == ' ' && Math.abs(endRow - startRow) == 1 &&
-                Math.abs(endCol - startCol) == 1 && (isKing || dir == 1);
+        int dir = (piece == 'X' || isKing) ? -1 : 1;  // 'X' moves up, 'O' moves down unless it's a king
+    
+        // Check if the move is within the board limits and the destination cell is empty
+        if (endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE && state[endRow][endCol] == ' ') {
+            // Check if the move is forward for normal pieces or any direction for kings
+            if (isKing) {
+                return Math.abs(endRow - startRow) == 1 && Math.abs(endCol - startCol) == 1;
+            } else {
+                return endRow - startRow == dir && Math.abs(endCol - startCol) == 1;
+            }
+        }
+        return false;
     }
 
     private boolean isValidJump(int startRow, int startCol, int endRow, int endCol, char[][] state, boolean isKing) {
         int jumpRow = (startRow + endRow) / 2;
         int jumpCol = (startCol + endCol) / 2;
-        return endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE &&
-                state[endRow][endCol] == ' ' && state[jumpRow][jumpCol] != ' ' &&
-                (Math.abs(endRow - startRow) == 2 || (isKing && Math.abs(endRow - startRow) == 1)) &&
-                Math.abs(endCol - startCol) == 2;
+        int dir = (state[startRow][startCol] == 'X' || isKing) ? -1 : 1;
+    
+        if (endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE && state[endRow][endCol] == ' ' && state[jumpRow][jumpCol] != ' ' && state[jumpRow][jumpCol] != state[startRow][startCol]) {
+            if (isKing) {
+                return Math.abs(endRow - startRow) == 2 && Math.abs(endCol - startCol) == 2;
+            } else {
+                return endRow - startRow == 2 * dir && Math.abs(endCol - startCol) == 2;
+            }
+        }
+        return false;
     }
 
     private String getMoveAction(int startRow, int startCol, int endRow, int endCol) {
@@ -146,11 +160,12 @@ public class CheckersGame implements Game<char[][], String, Character> {
         return blackCount == 0 || whiteCount == 0;
     }
 
-    private void selectPlayerPiece() {
+    public void selectPlayerPiece() {
         System.out.println("Choose the piece you want to play with ('X' or 'O'): ");
         String input = scanner.nextLine();
         if (input.length() == 1 && (input.charAt(0) == 'X' || input.charAt(0) == 'O')) {
             currentPlayer = input.toUpperCase().charAt(0);
+            aiPlaysAs = (currentPlayer == 'X') ? 'O' : 'X'; // AI plays as the opposite
         } else {
             System.out.println("Invalid option. Choose 'X' or 'O'.");
             selectPlayerPiece();
@@ -304,9 +319,7 @@ public class CheckersGame implements Game<char[][], String, Character> {
         }
     }
 
-    private void switchToNextPlayer() {
-        currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
-    }
+   
 
     private String getUserMove() {
         System.out.println("Enter your move (format: startRow,startCol:endRow,endCol): ");
@@ -326,30 +339,28 @@ public class CheckersGame implements Game<char[][], String, Character> {
             System.out.println("Current player: " + currentPlayer);
             char[][] currentState = getCopyOfBoard();
             List<String> possibleActions = getActions(currentState);
-
+    
             if (possibleActions.isEmpty()) {
                 System.out.println("No possible actions for player " + currentPlayer + ". Game over!");
                 gameOver = true;
                 continue;
             }
-
-            if (currentPlayer == 'O') {
+    
+            // Determine action based on current player and who controls that player (human or AI)
+            if ((currentPlayer == 'O' && aiPlaysAs == 'O') || (currentPlayer == 'X' && aiPlaysAs == 'X')) {
+                // AI's turn
+                String aiAction = iterativeDeepeningAlphaBetaSearch.makeDecision(currentState);
+                System.out.println("AI (" + currentPlayer + ") moves: " + aiAction);
+                applyAction(currentState, aiAction);
+            } else {
+                // Human's turn
                 String userAction = getUserMove();
                 applyAction(currentState, userAction);
-                if (!isGameOver()) {
-                    switchToNextPlayer();
-                }
             }
-
-            if (currentPlayer == 'X' && !gameOver) {
-                printBoard();
-                System.out.println("AI's turn: " + currentPlayer);
-                String aiAction = iterativeDeepeningAlphaBetaSearch.makeDecision(currentState);
-                System.out.println("AI moves: " + aiAction);
-                applyAction(currentState, aiAction);
+    
+            if (!isGameOver()) {
                 switchToNextPlayer();
             }
-
             gameOver = isGameOver();
         }
         printBoard();
@@ -376,5 +387,13 @@ public class CheckersGame implements Game<char[][], String, Character> {
         }
         return newState;
     }
+    public void switchToNextPlayer() {
+        currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
+    }
+    
+    public char getCurrentPlayer() {
+        return currentPlayer;
+    }
+  
 
 }
