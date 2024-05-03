@@ -14,15 +14,27 @@ public class CheckersGameGUI extends JFrame {
     private int selectedCol = -1;
     private JLabel selectedLabel = null;
     private CheckersGame checkersGame;
+    private char currentPlayer;
+    private char aiPlaysAs;
+    private JLabel statusLabel;
 
     public CheckersGameGUI() {
         checkersGame = new CheckersGame();
+        currentPlayer = 'X'; // Define o jogador inicial
+        aiPlaysAs = 'O'; // Define qual peça a IA joga
         setTitle("Checkers Game");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int width = (int) (screenSize.getWidth() * 0.8);
+        int height = (int) (screenSize.getHeight() * 0.8);
+        setSize(width, height);
 
         board = checkersGame.getInitialState();
         createBoardPanel();
+
+        statusLabel = new JLabel("", SwingConstants.CENTER);
+        add(statusLabel, BorderLayout.NORTH);
 
         add(boardPanel, BorderLayout.CENTER);
         pack();
@@ -34,12 +46,17 @@ public class CheckersGameGUI extends JFrame {
         boardPanel = new JPanel(new GridLayout(SIZE, SIZE));
         labels = new JLabel[SIZE][SIZE];
 
+        int cellSize = (int) (Math.min(getWidth(), getHeight()) * 0.9 / SIZE);
+        Font pieceFont = new Font("Arial", Font.PLAIN, cellSize);
+
         for (int row = 0; row < SIZE; row++) {
             for (int col = 0; col < SIZE; col++) {
-                JLabel label = new JLabel(Character.toString(board[row][col]), SwingConstants.CENTER);
+                JLabel label = new JLabel("", SwingConstants.CENTER);
                 label.setOpaque(true);
                 label.setBackground((row + col) % 2 == 0 ? Color.GRAY : Color.WHITE);
                 label.addMouseListener(new PieceClickListener(row, col));
+                label.setPreferredSize(new Dimension(cellSize, cellSize));
+                label.setFont(pieceFont);
                 labels[row][col] = label;
                 boardPanel.add(label);
             }
@@ -47,8 +64,15 @@ public class CheckersGameGUI extends JFrame {
     }
 
     private void movePiece(int endRow, int endCol) {
-        if (selectedRow != -1 && selectedCol != -1 && checkersGame.isValidMove(selectedRow, selectedCol, endRow, endCol, board)) {
-            checkersGame.makeMove(selectedRow, selectedCol, endRow, endCol);
+        if (selectedRow != -1 && selectedCol != -1) {
+            if (checkersGame.isValidMove(selectedRow, selectedCol, endRow, endCol, board)) {
+                checkersGame.makeMove(selectedRow, selectedCol, endRow, endCol);
+            } else if (checkersGame.isValidJump(selectedRow, selectedCol, endRow, endCol, board, false)) {
+                checkersGame.makeMove(selectedRow, selectedCol, endRow, endCol);
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid move!", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
             updateBoard();
             clearHighlights();
             switchToNextPlayer();
@@ -60,6 +84,11 @@ public class CheckersGameGUI extends JFrame {
         for (int row = 0; row < SIZE; row++) {
             for (int col = 0; col < SIZE; col++) {
                 labels[row][col].setText(Character.toString(currentBoard[row][col]));
+                if (currentBoard[row][col] == 'X') {
+                    labels[row][col].setForeground(Color.BLUE); // X em azul
+                } else if (currentBoard[row][col] == 'O') {
+                    labels[row][col].setForeground(Color.RED); // O em vermelho
+                }
                 labels[row][col].setBackground((row + col) % 2 == 0 ? Color.GRAY : Color.WHITE);
             }
         }
@@ -73,24 +102,32 @@ public class CheckersGameGUI extends JFrame {
         }
     }
 
-    private void switchToNextPlayer() {
-        checkersGame.switchToNextPlayer();
-        if (checkersGame.getCurrentPlayer() == 'X') { // Assuming 'X' is the AI
+    public void switchToNextPlayer() {
+        currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
+        if ((currentPlayer == 'X' && aiPlaysAs == 'X') || (currentPlayer == 'O' && aiPlaysAs == 'O')) {
+            statusLabel.setText("IA Está Pensando, Aguarde Sua Vez!");
             SwingUtilities.invokeLater(this::makeAIMove);
+        } else {
+            statusLabel.setText("");
         }
     }
 
     private void makeAIMove() {
         try {
-            JOptionPane.showMessageDialog(this, "AI is thinking...", "AI Move", JOptionPane.INFORMATION_MESSAGE);
+            // Exibe mensagem de que a IA está pensando em algum canto da tela
+            statusLabel.setText("AI is thinking...");
             String aiAction = checkersGame.iterativeDeepeningAlphaBetaSearch.makeDecision(board);
             if (aiAction != null && !aiAction.isEmpty()) {
                 applyMove(aiAction);
             } else {
-                JOptionPane.showMessageDialog(this, "AI did not find a valid move.", "No Move", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "AI did not find a valid move.", "No Move",
+                        JOptionPane.ERROR_MESSAGE);
             }
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "An error occurred during AI processing: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "An error occurred during AI processing: " + e.getMessage(), "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        } finally {
+            statusLabel.setText(""); // Remove a mensagem após a IA jogar
         }
     }
 

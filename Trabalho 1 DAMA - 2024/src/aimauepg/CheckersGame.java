@@ -73,9 +73,10 @@ public class CheckersGame implements Game<char[][], String, Character> {
     boolean isValidMove(int startRow, int startCol, int endRow, int endCol, char[][] state) {
         char piece = state[startRow][startCol];
         boolean isKing = isKing(piece);
-        int dir = (piece == 'X' || isKing) ? -1 : 1;  // 'X' moves up, 'O' moves down unless it's a king
-    
-        // Check if the move is within the board limits and the destination cell is empty
+        int dir = (piece == 'X' || isKing) ? -1 : 1; // 'X' moves up, 'O' moves down unless it's a king
+
+        // Check if the move is within the board limits and the destination cell is
+        // empty
         if (endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE && state[endRow][endCol] == ' ') {
             // Check if the move is forward for normal pieces or any direction for kings
             if (isKing) {
@@ -87,12 +88,13 @@ public class CheckersGame implements Game<char[][], String, Character> {
         return false;
     }
 
-    private boolean isValidJump(int startRow, int startCol, int endRow, int endCol, char[][] state, boolean isKing) {
+    boolean isValidJump(int startRow, int startCol, int endRow, int endCol, char[][] state, boolean isKing) {
         int jumpRow = (startRow + endRow) / 2;
         int jumpCol = (startCol + endCol) / 2;
         int dir = (state[startRow][startCol] == 'X' || isKing) ? -1 : 1;
-    
-        if (endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE && state[endRow][endCol] == ' ' && state[jumpRow][jumpCol] != ' ' && state[jumpRow][jumpCol] != state[startRow][startCol]) {
+
+        if (endRow >= 0 && endRow < SIZE && endCol >= 0 && endCol < SIZE && state[endRow][endCol] == ' '
+                && state[jumpRow][jumpCol] != ' ' && state[jumpRow][jumpCol] != state[startRow][startCol]) {
             if (isKing) {
                 return Math.abs(endRow - startRow) == 2 && Math.abs(endCol - startCol) == 2;
             } else {
@@ -139,6 +141,16 @@ public class CheckersGame implements Game<char[][], String, Character> {
 
         // Troque para o próximo jogador
         switchToNextPlayer();
+
+        // Verifique se o jogo acabou (se um jogador não tem mais peças ou fez uma dama)
+        if (hasPlayerWon('X') || hasPlayerWon('O')) {
+            System.out.println("Player " + currentPlayer + " wins!");
+            return;
+        }
+
+        if (isGameOver()) {
+            System.out.println("Game over! It's a draw.");
+        }
     }
 
     public boolean isGameOver() {
@@ -319,8 +331,6 @@ public class CheckersGame implements Game<char[][], String, Character> {
         }
     }
 
-   
-
     private String getUserMove() {
         System.out.println("Enter your move (format: startRow,startCol:endRow,endCol): ");
         String moveInput = scanner.nextLine();
@@ -339,14 +349,15 @@ public class CheckersGame implements Game<char[][], String, Character> {
             System.out.println("Current player: " + currentPlayer);
             char[][] currentState = getCopyOfBoard();
             List<String> possibleActions = getActions(currentState);
-    
+
             if (possibleActions.isEmpty()) {
                 System.out.println("No possible actions for player " + currentPlayer + ". Game over!");
                 gameOver = true;
                 continue;
             }
-    
-            // Determine action based on current player and who controls that player (human or AI)
+
+            // Determine action based on current player and who controls that player (human
+            // or AI)
             if ((currentPlayer == 'O' && aiPlaysAs == 'O') || (currentPlayer == 'X' && aiPlaysAs == 'X')) {
                 // AI's turn
                 String aiAction = iterativeDeepeningAlphaBetaSearch.makeDecision(currentState);
@@ -357,7 +368,7 @@ public class CheckersGame implements Game<char[][], String, Character> {
                 String userAction = getUserMove();
                 applyAction(currentState, userAction);
             }
-    
+
             if (!isGameOver()) {
                 switchToNextPlayer();
             }
@@ -387,13 +398,13 @@ public class CheckersGame implements Game<char[][], String, Character> {
         }
         return newState;
     }
+
     public void switchToNextPlayer() {
         currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
     }
-    
+
     public char getCurrentPlayer() {
         return currentPlayer;
     }
-  
 
 }

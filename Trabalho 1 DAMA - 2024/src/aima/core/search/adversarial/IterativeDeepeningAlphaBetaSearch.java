@@ -25,7 +25,6 @@ public class IterativeDeepeningAlphaBetaSearch<S, A, P> implements AdversarialSe
     protected double utilMax;
     protected double utilMin;
     protected int currDepthLimit;
-    private boolean heuristicEvaluationUsed; // indicates that non-terminal
     // nodes
     // have been evaluated.
     private Timer timer;
@@ -83,40 +82,48 @@ public class IterativeDeepeningAlphaBetaSearch<S, A, P> implements AdversarialSe
     @Override
     public A makeDecision(S state) {
         metrics = new Metrics();
-        StringBuffer logText = null;
+        StringBuffer logText = logEnabled ? new StringBuffer() : null;
         P player = game.getPlayer(state);
         List<A> results = orderActions(state, game.getActions(state), player, 0);
         timer.start();
         currDepthLimit = 0;
-        do {
+
+        double bestValue = Double.NEGATIVE_INFINITY;
+        A bestAction = null;
+
+        while (!timer.timeOutOccurred()) {
             incrementDepthLimit();
             if (logEnabled)
-                logText = new StringBuffer("depth " + currDepthLimit + ": ");
-            heuristicEvaluationUsed = false;
+                logText.append("Depth " + currDepthLimit + ": ");
+
             ActionStore<A> newResults = new ActionStore<>();
             for (A action : results) {
                 double value = minValue(game.getResult(state, action), player, Double.NEGATIVE_INFINITY,
                         Double.POSITIVE_INFINITY, 1);
                 if (timer.timeOutOccurred())
-                    break; // exit from action loop
+                    break; // Exit if time out occurred
                 newResults.add(action, value);
+                if (value > bestValue) {
+                    bestValue = value;
+                    bestAction = action;
+                }
                 if (logEnabled)
-                    logText.append(action).append("->").append(value).append(" ");
+                    logText.append(action).append(" -> ").append(value).append(", ");
             }
             if (logEnabled)
                 System.out.println(logText);
-            if (newResults.size() > 0) {
-                results = newResults.actions;
-                if (!timer.timeOutOccurred()) {
-                    if (hasSafeWinner(newResults.utilValues.get(0)))
-                        break; // exit from iterative deepening loop
-                    else if (newResults.size() > 1
-                            && isSignificantlyBetter(newResults.utilValues.get(0), newResults.utilValues.get(1)))
-                        break; // exit from iterative deepening loop
+
+            if (!newResults.isEmpty()) {
+                results = newResults.actions; // Focus on potentially better actions
+                if (!timer.timeOutOccurred() && newResults.isSignificantlyBetterThanNext()) {
+                    break; // Stop if the best action is significantly better than the next
                 }
             }
-        } while (!timer.timeOutOccurred() && heuristicEvaluationUsed);
-        return results.get(0);
+            if (hasSafeWinner(bestValue))
+                break; // Early exit if a safe winning move is found
+        }
+
+        return bestAction != null ? bestAction : results.get(0);
     }
 
     // returns an utility value
@@ -208,25 +215,68 @@ public class IterativeDeepeningAlphaBetaSearch<S, A, P> implements AdversarialSe
         if (game.isTerminal(state)) {
             return game.getUtility(state, player);
         } else {
-            heuristicEvaluationUsed = true;
             char[][] board = (char[][]) state;
-            int numPiecesPlayer = 0;
-            int numPiecesOpponent = 0;
+            double score = 0.0;
 
-            // Count the number of pieces for each player on the board
+            // Counts and values
+            double myKings = 0;
+            double opponentKings = 0;
+            double myPieces = 0;
+            double opponentPieces = 0;
+            double kingValue = 5.0; // Increased value for kings
+
             for (int row = 0; row < SIZE; row++) {
                 for (int col = 0; col < SIZE; col++) {
-                    if (board[row][col] == 'X' || board[row][col] == 'K') {
-                        numPiecesPlayer++;
-                    } else if (board[row][col] == 'O' || board[row][col] == 'Q') {
-                        numPiecesOpponent++;
+                    char piece = board[row][col];
+                    switch (piece) {
+                        case 'X':
+                            myPieces++;
+                            if (row == 0)
+                                myKings += kingValue; // Piece is a king
+                            break;
+                        case 'K':
+                            myKings += kingValue;
+                            break;
+                        case 'O':
+                            opponentPieces++;
+                            if (row == SIZE - 1)
+                                opponentKings += kingValue; // Opponent piece is a king
+                            break;
+                        case 'Q':
+                            opponentKings += kingValue;
+                            break;
                     }
                 }
             }
 
-            // Return a heuristic evaluation based on the difference in the number of pieces
-            return (numPiecesPlayer - numPiecesOpponent) / 6.0;
+            // Calculate basic score
+            score += (myKings + myPieces) - (opponentKings + opponentPieces);
+
+            // Prioritize kinging and blocking
+            double myKingingPotential = SIZE - 1 - getClosestRowToKing(board, 'X');
+            double opponentKingingPotential = SIZE - 1 - getClosestRowToKing(board, 'O');
+            score += 2.0 * myKingingPotential - 2.0 * opponentKingingPotential;
+
+            return score;
         }
+    }
+
+    private int getClosestRowToKing(char[][] board, char playerPiece) {
+        int closestRow = SIZE; // Start with the maximum size, indicating farthest
+        for (int row = 0; row < SIZE; row++) {
+            for (int col = 0; col < SIZE; col++) {
+                if ((playerPiece == 'X' && board[row][col] == 'X') || (playerPiece == 'O' && board[row][col] == 'O')) {
+                    if (playerPiece == 'X') {
+                        // Smaller row index means closer to becoming a king
+                        closestRow = Math.min(closestRow, row);
+                    } else {
+                        // Larger row index means closer to becoming a king
+                        closestRow = Math.min(closestRow, SIZE - 1 - row);
+                    }
+                }
+            }
+        }
+        return closestRow;
     }
 
     /**
@@ -272,8 +322,18 @@ public class IterativeDeepeningAlphaBetaSearch<S, A, P> implements AdversarialSe
             utilValues.add(idx, utilValue);
         }
 
-        int size() {
-            return actions.size();
+        boolean isEmpty() {
+            return actions.isEmpty();
+        }
+
+        boolean isSignificantlyBetterThanNext() {
+            if (utilValues.size() < 2) {
+                return false; // There is no "next" value to compare
+            }
+            double bestValue = utilValues.get(0);
+            double secondBestValue = utilValues.get(1);
+            double difference = bestValue - secondBestValue;
+            return difference >= 2.0; // Adjust this threshold as needed
         }
     }
 }
